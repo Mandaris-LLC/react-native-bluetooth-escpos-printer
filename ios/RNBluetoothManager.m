@@ -9,6 +9,7 @@
 #import <Foundation/Foundation.h>
 #import "RNBluetoothManager.h"
 #import <CoreBluetooth/CoreBluetooth.h>
+
 @implementation RNBluetoothManager
 
 NSString *EVENT_DEVICE_ALREADY_PAIRED = @"EVENT_DEVICE_ALREADY_PAIRED";
@@ -17,11 +18,13 @@ NSString *EVENT_DEVICE_FOUND = @"EVENT_DEVICE_FOUND";
 NSString *EVENT_CONNECTION_LOST = @"EVENT_CONNECTION_LOST";
 NSString *EVENT_UNABLE_CONNECT=@"EVENT_UNABLE_CONNECT";
 NSString *EVENT_CONNECTED=@"EVENT_CONNECTED";
+NSString *EVENT_READY=@"EVENT_READY";
+
 static NSArray<CBUUID *> *supportServices = nil;
 static NSDictionary *writeableCharactiscs = nil;
 bool hasListeners;
 static CBPeripheral *connected;
-static RNBluetoothManager *instance;
+static RNBluetoothManager<CBPeripheralDelegate> *instance;
 static NSObject<WriteDataToBleDelegate> *writeDataDelegate;// delegate of write data resule;
 static NSData *toWrite;
 static NSTimer *timer;
@@ -77,7 +80,8 @@ static NSTimer *timer;
               EVENT_DEVICE_FOUND:EVENT_DEVICE_FOUND,
               EVENT_CONNECTION_LOST:EVENT_CONNECTION_LOST,
               EVENT_UNABLE_CONNECT:EVENT_UNABLE_CONNECT,
-              EVENT_CONNECTED:EVENT_CONNECTED
+              EVENT_CONNECTED:EVENT_CONNECTED,
+              EVENT_READY:EVENT_READY
               };
 }
 - (dispatch_queue_t)methodQueue
@@ -100,162 +104,17 @@ static NSTimer *timer;
              EVENT_UNABLE_CONNECT,
              EVENT_CONNECTION_LOST,
              EVENT_CONNECTED,
-             EVENT_DEVICE_ALREADY_PAIRED];
+             EVENT_DEVICE_ALREADY_PAIRED,
+             EVENT_READY];
 }
 
+
+- (BOOL)isStateReady:(CBManagerState)state {
+    return state == CBManagerStatePoweredOn;
+}
 
 RCT_EXPORT_MODULE(BluetoothManager);
 
-
-//isBluetoothEnabled
-RCT_EXPORT_METHOD(isBluetoothEnabled:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    CBManagerState state = [self.centralManager  state];
-    resolve(state == CBManagerStatePoweredOn?@"true":@"false");//canot pass boolean or int value to resolve directly.
-}
-
-//enableBluetooth
-RCT_EXPORT_METHOD(enableBluetooth:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    resolve(nil);
-}
-//disableBluetooth
-RCT_EXPORT_METHOD(disableBluetooth:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    resolve(nil);
-}
-//scanDevices
-RCT_EXPORT_METHOD(scanDevices:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    @try{
-        if(!self.centralManager || self.centralManager.state!=CBManagerStatePoweredOn){
-            reject(@"BLUETOOTCH_INVALID_STATE",@"BLUETOOTCH_INVALID_STATE",nil);
-            return;
-        }
-        if(self.centralManager.isScanning){
-            [self.centralManager stopScan];
-        }
-        self.scanResolveBlock = resolve;
-        self.scanRejectBlock = reject;
-        if(connected && connected.identifier){
-            NSDictionary *idAndName =@{@"address":connected.identifier.UUIDString,@"name":connected.name?connected.name:@""};
-            NSDictionary *peripheralStored = @{connected.identifier.UUIDString:connected};
-            if(!self.foundDevices){
-                self.foundDevices = [[NSMutableDictionary alloc] init];
-            }
-            [self.foundDevices addEntriesFromDictionary:peripheralStored];
-            if(hasListeners){
-                [self sendEventWithName:EVENT_DEVICE_FOUND body:@{@"device":idAndName}];
-            }
-        }
-        [self.centralManager scanForPeripheralsWithServices:nil options:@{CBCentralManagerScanOptionAllowDuplicatesKey:@NO}];
-        //Callbacks:
-        //centralManager:didDiscoverPeripheral:advertisementData:RSSI:
-        NSLog(@"Scanning started with services.");
-        if(timer && timer.isValid){
-            [timer invalidate];
-            timer = nil;
-        }
-        timer = [NSTimer scheduledTimerWithTimeInterval:30 target:self selector:@selector(callStop) userInfo:nil repeats:NO];
-    
-    }
-    @catch(NSException *exception){
-        NSLog(@"ERROR IN STARTING SCANE %@",exception);
-        reject([exception name],[exception name],nil);
-    }
-}
-
-//stop scan
-RCT_EXPORT_METHOD(stopScan:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    [self callStop];
-    resolve(nil);
-}
-
-//connect(address)
-RCT_EXPORT_METHOD(connect:(NSString *)address
-                  findEventsWithResolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    NSLog(@"Trying to connect....%@",address);
-    [self callStop];
-    if(connected){
-        NSString *connectedAddress =connected.identifier.UUIDString;
-        if([address isEqualToString:connectedAddress]){
-            resolve(nil);
-            return;
-        }else{
-            [self.centralManager cancelPeripheralConnection:connected];
-            //Callbacks:
-            //entralManager:didDisconnectPeripheral:error:
-        }
-    }
-    CBPeripheral *peripheral = [self.foundDevices objectForKey:address];
-    self.connectResolveBlock = resolve;
-    self.connectRejectBlock = reject;
-    if(peripheral){
-          _waitingConnect = address;
-          NSLog(@"Trying to connectPeripheral....%@",address);
-        [self.centralManager connectPeripheral:peripheral options:nil];
-        // Callbacks:
-        //    centralManager:didConnectPeripheral:
-        //    centralManager:didFailToConnectPeripheral:error:
-    }else{
-          //starts the scan.
-        _waitingConnect = address;
-         NSLog(@"Scan to find ....%@",address);
-        [self.centralManager scanForPeripheralsWithServices:nil options:@{CBCentralManagerScanOptionAllowDuplicatesKey:@NO}];
-        //Callbacks:
-        //centralManager:didDiscoverPeripheral:advertisementData:RSSI:
-    }
-}
-//unpaire(address)
-
-
--(void)callStop{
-    if(self.centralManager.isScanning){
-        [self.centralManager stopScan];
-        NSMutableArray *devices = [[NSMutableArray alloc] init];
-        for(NSString *key in self.foundDevices){
-            NSLog(@"insert found devies:%@ =>%@",key,[self.foundDevices objectForKey:key]);
-            NSString *name = [self.foundDevices objectForKey:key].name;
-            if(!name){
-                name = @"";
-            }
-            [devices addObject:@{@"address":key,@"name":name}];
-        }
-        NSError *error = nil;
-        NSData* jsonData = [NSJSONSerialization dataWithJSONObject:devices options:NSJSONWritingPrettyPrinted error:&error];
-        NSString * jsonStr = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
-        if(hasListeners){
-            [self sendEventWithName:EVENT_DEVICE_DISCOVER_DONE body:@{@"found":jsonStr,@"paired":@"[]"}];
-        }
-        if(self.scanResolveBlock){
-            RCTPromiseResolveBlock rsBlock = self.scanResolveBlock;
-            rsBlock(@{@"found":jsonStr,@"paired":@"[]"});
-            self.scanResolveBlock = nil;
-        }
-    }
-    if(timer && timer.isValid){
-        [timer invalidate];
-        timer = nil;
-    }
-    self.scanRejectBlock = nil;
-    self.scanResolveBlock = nil;
-}
-- (void) initSupportServices
-{
-    if(!supportServices){
-        CBUUID *issc = [CBUUID UUIDWithString: @"49535343-FE7D-4AE5-8FA9-9FAFD205E455"];
-        supportServices = [NSArray arrayWithObject:issc];/*ISSC*/
-        writeableCharactiscs = @{issc:@"49535343-8841-43F4-A8D4-ECBE34729BB3"};
-    }
-}
 
 - (CBCentralManager *) centralManager
 {
@@ -280,27 +139,175 @@ RCT_EXPORT_METHOD(connect:(NSString *)address
     return _centralManager;
 }
 
+//isBluetoothEnabled
+RCT_EXPORT_METHOD(isBluetoothEnabled:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    CBManagerState state = [self.centralManager state];
+    resolve([NSNumber numberWithBool:[self isStateReady:state]]);
+}
+
+//enableBluetooth
+RCT_EXPORT_METHOD(enableBluetooth:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    [self centralManager];
+    resolve(nil);
+}
+//disableBluetooth
+RCT_EXPORT_METHOD(disableBluetooth:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    resolve(nil);
+}
+//scanDevices
+RCT_EXPORT_METHOD(scanDevices:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    @try{
+        if (!self.centralManager || ![self isStateReady:self.centralManager.state]) {
+            reject(@"BLUETOOTCH_INVALID_STATE",@"BLUETOOTCH_INVALID_STATE",nil);
+            return;
+        }
+        if(self.centralManager.isScanning){
+            [self.centralManager stopScan];
+        }
+        self.scanResolveBlock = resolve;
+        self.scanRejectBlock = reject;
+        if (connected && connected.identifier) {
+            NSDictionary *peripheralStored = @{connected.identifier.UUIDString: connected};
+            if(!self.foundDevices){
+                self.foundDevices = [[NSMutableDictionary alloc] init];
+            }
+            [self.foundDevices addEntriesFromDictionary:peripheralStored];
+            [self sendDevicesFound];
+        }
+        [self initSupportServices];
+        [self.centralManager scanForPeripheralsWithServices:supportServices options:@{CBCentralManagerScanOptionAllowDuplicatesKey:@NO}];
+        NSLog(@"Scanning started with services.");
+        if(timer && timer.isValid){
+            [timer invalidate];
+            timer = nil;
+        }
+        timer = [NSTimer scheduledTimerWithTimeInterval:30 target:self selector:@selector(callStop) userInfo:nil repeats:NO];
+    
+    }
+    @catch(NSException *exception){
+        NSLog(@"ERROR IN STARTING SCANE %@",exception);
+        reject([exception name],[exception name],nil);
+    }
+}
+
+//stop scan
+RCT_EXPORT_METHOD(stopScan:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    [self callStop];
+    resolve(nil);
+}
+
+RCT_EXPORT_METHOD(getConnectedPrinter:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    resolve(connected ? @{@"id": connected.identifier.UUIDString, @"name": connected.name ?: @""} : nil);
+}
+
+//connect(address)
+RCT_EXPORT_METHOD(connect:(NSString *)address
+                  findEventsWithResolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    NSLog(@"Trying to connect....%@",address);
+    [self callStop];
+    if(connected){
+        NSString *connectedAddress =connected.identifier.UUIDString;
+        if([address isEqualToString:connectedAddress]){
+            resolve(nil);
+            return;
+        }else{
+            [self.centralManager cancelPeripheralConnection:connected];
+            //Callbacks:
+            //entralManager:didDisconnectPeripheral:error:
+        }
+    }
+    CBPeripheral *peripheral = [self.foundDevices objectForKey:address];
+    self.connectResolveBlock = resolve;
+    self.connectRejectBlock = reject;
+    if(peripheral){
+        _waitingConnect = address;
+        NSLog(@"Trying to connectPeripheral....%@",address);
+        [self.centralManager connectPeripheral:peripheral options:nil];
+        // Callbacks:
+        //    centralManager:didConnectPeripheral:
+        //    centralManager:didFailToConnectPeripheral:error:
+    }else{
+        _waitingConnect = address;
+        [self.centralManager scanForPeripheralsWithServices:supportServices options:@{CBCentralManagerScanOptionAllowDuplicatesKey:@NO}];
+    }
+}
+//unpaire(address)
+
+
+-(void)callStop {
+    if (self.centralManager.isScanning) {
+        [self.centralManager stopScan];
+        if(hasListeners){
+            [self sendEventWithName:EVENT_DEVICE_DISCOVER_DONE body:nil];
+        }
+        if(self.scanResolveBlock){
+            RCTPromiseResolveBlock rsBlock = self.scanResolveBlock;
+            rsBlock(nil);
+            self.scanResolveBlock = nil;
+        }
+    }
+    if (timer && timer.isValid){
+        [timer invalidate];
+        timer = nil;
+    }
+    self.scanRejectBlock = nil;
+    self.scanResolveBlock = nil;
+}
+- (void)initSupportServices {
+    if(!supportServices){
+        CBUUID *issc = [CBUUID UUIDWithString: @"E7810A71-73AE-499D-8C15-FAA9AEF0C3F2"];
+        supportServices = [NSArray arrayWithObject:issc];/*ISSC*/
+        writeableCharactiscs = @{issc:@"BEF8D6C9-9C21-4C9E-B632-BD58C1009F9F"};
+    }
+}
+
+- (void)sendDevicesFound {
+    NSMutableArray *devices = [[NSMutableArray alloc] init];
+    [self.foundDevices enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, CBPeripheral * _Nonnull obj, BOOL * _Nonnull stop) {
+        [devices addObject:@{@"id":obj.identifier.UUIDString, @"name" : obj.name ?: @""}];
+    }];
+    if(hasListeners){
+        [self sendEventWithName:EVENT_DEVICE_FOUND body:devices];
+    }
+}
+
 /**
  * CBCentralManagerDelegate
  **/
 - (void)centralManagerDidUpdateState:(CBCentralManager *)central{
-    NSLog(@"%ld",(long)central.state);
+    if ([self isStateReady:central.state]) {
+        if(hasListeners){
+            [self sendEventWithName:EVENT_READY body:nil];
+        }
+    }
 }
 
 - (void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary<NSString *, id> *)advertisementData RSSI:(NSNumber *)RSSI{
-    NSLog(@"did discover peripheral: %@",peripheral);
-    NSDictionary *idAndName =@{@"address":peripheral.identifier.UUIDString,@"name":peripheral.name?peripheral.name:@""};
-    NSDictionary *peripheralStored = @{peripheral.identifier.UUIDString:peripheral};
-    if(!self.foundDevices){
+    NSLog(@"did discover peripheral: %@", peripheral);
+    NSDictionary *peripheralStored = @{peripheral.identifier.UUIDString: peripheral};
+    if (!self.foundDevices) {
         self.foundDevices = [[NSMutableDictionary alloc] init];
     }
     [self.foundDevices addEntriesFromDictionary:peripheralStored];
-    if(hasListeners){
-        [self sendEventWithName:EVENT_DEVICE_FOUND body:@{@"device":idAndName}];
-    }
     if(_waitingConnect && [_waitingConnect isEqualToString: peripheral.identifier.UUIDString]){
         [self.centralManager connectPeripheral:peripheral options:nil];
         [self callStop];
+    } else {
+        [self sendDevicesFound];
     }
 }
 
@@ -309,17 +316,13 @@ RCT_EXPORT_METHOD(connect:(NSString *)address
     connected = peripheral;
     NSString *pId = peripheral.identifier.UUIDString;
     if(_waitingConnect && [_waitingConnect isEqualToString: pId] && self.connectResolveBlock){
-        NSLog(@"Predefined the support services, stop to looking up services.");
-//        peripheral.delegate=self;
-//        [peripheral discoverServices:nil];
         self.connectResolveBlock(nil);
         _waitingConnect = nil;
         self.connectRejectBlock = nil;
         self.connectResolveBlock = nil;
     }
-       NSLog(@"going to emit EVENT_CONNECTED.");
     if(hasListeners){
-        [self sendEventWithName:EVENT_CONNECTED body:@{@"device":@{@"name":peripheral.name?peripheral.name:@"",@"address":peripheral.identifier.UUIDString}}];
+        [self sendEventWithName:EVENT_CONNECTED body:@{@"name":peripheral.name?peripheral.name:@"",@"id":peripheral.identifier.UUIDString}];
     }
 }
 
@@ -438,10 +441,7 @@ RCT_EXPORT_METHOD(connect:(NSString *)address
                 }
             }
         }
-        
-        
     }
-    
     if(error){
         NSLog(@"Discrover charactoreristics error:%@",error);
         return;
