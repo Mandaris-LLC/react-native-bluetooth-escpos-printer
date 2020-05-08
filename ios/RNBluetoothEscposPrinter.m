@@ -34,6 +34,7 @@ Byte V[] = {0x56};//V
 Byte A[] = {0x61};//a
 Byte E[] = {0x45};//E
 Byte G[] = {0x47};//G
+Byte CUT[] = {0x69};
 
 RCTPromiseResolveBlock pendingResolve;
 RCTPromiseRejectBlock pendingReject;
@@ -129,6 +130,20 @@ RCT_EXPORT_METHOD(printerLeftSpace:(int) sp
     }
 }
 
+RCT_EXPORT_METHOD(cut:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject) {
+    if(RNBluetoothManager.isConnected){
+        NSMutableData *data = [[NSMutableData alloc] init];
+        [data appendBytes:ESC length:1];
+        [data appendBytes:CUT length:1];
+        pendingResolve = resolve;
+        pendingReject = reject;
+        [RNBluetoothManager writeValue:data withDelegate:self];
+    }else{
+        reject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
+    }
+}
+
 //{ESC, 45, 0x00 };
 //{FS, 45, 0x00 };
 RCT_EXPORT_METHOD(printerUnderLine:(int)sp withResolver:(RCTPromiseResolveBlock) resolve
@@ -189,8 +204,7 @@ RCT_EXPORT_METHOD(printText:(NSString *) text withOptions:(NSDictionary *) optio
         }
     }
 }
--(NSStringEncoding) toNSEncoding:(NSString *)encoding
-{NSLog(@"encoding: %@",encoding);
+-(NSStringEncoding) toNSEncoding:(NSString *)encoding {
     NSStringEncoding nsEncoding = CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingGB_18030_2000);
     if([@"UTF-8" isEqualToString:encoding] || [@"utf-8" isEqualToString:encoding] ){
         nsEncoding = NSUTF8StringEncoding;
@@ -241,8 +255,6 @@ RCT_EXPORT_METHOD(printText:(NSString *) text withOptions:(NSDictionary *) optio
     //LF
    // [toSend appendBytes:&NL length:sizeof(NL)];
   
-    NSLog(@"Goting to write text : %@",text);
-    NSLog(@"With data: %@",toSend);
     [RNBluetoothManager writeValue:toSend withDelegate:delegate];
 }
 
@@ -620,7 +632,7 @@ RCT_EXPORT_METHOD(printBarCode:(NSString *) str withType:(NSInteger)
     }
     pendingReject = nil;
     pendingResolve = nil;
-    [NSThread sleepForTimeInterval:0.05f];//slow down
+    //[NSThread sleepForTimeInterval:0.05f];//slow down
 }
 
 @end

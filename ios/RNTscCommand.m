@@ -11,22 +11,19 @@
 #import "RNTscCommand.h"
 #import "ImageUtils.h"
 @implementation RNTscCommand
--(id)init
-{
+
+-(id)init {
     _command = [[NSMutableData alloc] init];
     return self;
 }
--(id)initWithSize:(NSInteger)width height:(NSInteger) height andGap:(NSInteger)gap
-{
+-(id)initWithSize:(NSInteger)width height:(NSInteger) height andGap:(NSInteger)gap {
     _command = [[NSMutableData alloc] init];
     [self addSize:width height:height];
     [self addGap:gap];
     return self;
 }
--(void)addStrToCommand:(NSString *)str
-{
-    if(str){
-    //encoding GBK? UTF-8? GB2312?
+-(void)addStrToCommand:(NSString *)str {
+    if(str) {
         [_command appendData:[str dataUsingEncoding:CFStringConvertEncodingToNSStringEncoding(kCFStringEncodingGB_18030_2000)]];
     }
 }
@@ -34,56 +31,46 @@
 {
     [self addStrToCommand:[NSString stringWithFormat:@"GAP %lu mm,%d mm\r\n",(int)gap,0]];
 }
--(void)addSize:(NSInteger)width height:(NSInteger) height
-{
+-(void)addSize:(NSInteger)width height:(NSInteger) height {
      [self addStrToCommand:[NSString stringWithFormat:@"SIZE %ld mm,%ld mm\r\n",width,height]];
 }
--(void)addCashdrwer:(NSInteger) m/*0,1*/ t1:(NSInteger) t1 t2:(NSInteger) t2
-{
+-(void)addCashdrwer:(NSInteger) m/*0,1*/ t1:(NSInteger) t1 t2:(NSInteger) t2 {
       [self addStrToCommand:[NSString stringWithFormat:@"CASHDRAWER %ld,%ld,%ld\r\n",m,t1,t2]];
 }
--(void)addOffset:(NSInteger) offset
-{
+-(void)addOffset:(NSInteger) offset {
       [self addStrToCommand:[NSString stringWithFormat:@"OFFSET %ld mm\r\n",offset]];
 }
 
 /*   SPEED1DIV5(1.5F), SPEED2(2.0F), SPEED3(3.0F), SPEED4(4.0F){ } */
--(void)addSpeed:(float) speed
-{
+-(void)addSpeed:(float) speed {
       [self addStrToCommand:[NSString stringWithFormat:@"SPEED %f\r\n",speed]];
 }
 
 /*   DNESITY0(0), DNESITY1(1), DNESITY2(2), DNESITY3(3), DNESITY4(4), DNESITY5(5), DNESITY6(6), DNESITY7(
  7), DNESITY8(8), DNESITY9(9), DNESITY10(10), DNESITY11(11), DNESITY12(12), DNESITY13(13), DNESITY14(
  14), DNESITY15(15) */
--(void)addDensity:(NSInteger)density
-{
+-(void)addDensity:(NSInteger)density {
       [self addStrToCommand:[NSString stringWithFormat:@"DENSITY %ld\r\n",density]];
 }
 
 /*  FORWARD(0), BACKWARD(1){ }*/
--(void)addDirection:(NSInteger) direction
-{
+-(void)addDirection:(NSInteger) direction {
     [self addStrToCommand:[NSString stringWithFormat:@"DIRECTION %ld\r\n",direction]];
 }
 
--(void)addReference:(NSInteger) x y:(NSInteger) y
-{
+-(void)addReference:(NSInteger) x y:(NSInteger)y {
       [self addStrToCommand:[NSString stringWithFormat:@"REFERENCE %ld,%ld\r\n",x,y]];
 }
--(void)addShif:(NSInteger) shif
-{
+-(void)addShif:(NSInteger)shif {
       [self addStrToCommand:[NSString stringWithFormat:@"SHIFT %ld\r\n",shif]];
 }
--(void)addCls
-{
+-(void)addCls {
       [self addStrToCommand:@"CLS\r\n"];
 }
--(void)addFeed:(NSInteger) dot
-{
+-(void)addFeed:(NSInteger)dot {
       [self addStrToCommand:[NSString stringWithFormat:@"FEED %ld\r\n",dot]];
 }
--(void)addBackFeed:(NSInteger) backDot
+-(void)addBackFeed:(NSInteger)backDot
 {
       [self addStrToCommand:[NSString stringWithFormat:@"BACKFEED %ld\r\n",backDot]];
 }
