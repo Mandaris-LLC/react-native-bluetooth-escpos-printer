@@ -25,7 +25,7 @@
             initPrinter[2]=0;
             initPrinter[3]=13;
             initPrinter[4]=10;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1)), dispatch_get_main_queue(), ^{
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.01f)), dispatch_get_main_queue(), ^{
                 [RNBluetoothManager writeValue:[NSData dataWithBytes:initPrinter length:5] withDelegate:self];
                 self.now = -1;
             });
@@ -42,9 +42,10 @@
     @synchronized (self) {
         NSInteger sizePerLine = (int)(_width/8);
         NSData *subData = [_toPrint subdataWithRange:NSMakeRange(_now, sizePerLine)];
-        [RNBluetoothManager writeValue:subData withDelegate:self];
-        _now = _now+sizePerLine;
-        [NSThread sleepForTimeInterval:0.01f];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.01f)), dispatch_get_main_queue(), ^{
+            [RNBluetoothManager writeValue:subData withDelegate:self];
+            self.now = self.now + sizePerLine;
+        });
     }
 }
 @end

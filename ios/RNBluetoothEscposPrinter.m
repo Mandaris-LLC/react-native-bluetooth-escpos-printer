@@ -624,15 +624,14 @@ RCT_EXPORT_METHOD(printBarCode:(NSString *) str withType:(NSInteger)
     }
 }
 
-- (void) didWriteDataToBle: (BOOL)success{
-    if(success){
+- (void)didWriteDataToBle:(BOOL)success{
+    if (success) {
         pendingResolve(nil);
-    }else{NSLog(@"REJECT<REJECT<REJECT<REJECT<REJECT<");
+    } else {
         pendingReject(@"COMMAND_NOT_SEND",@"COMMAND_NOT_SEND",nil);
     }
     pendingReject = nil;
     pendingResolve = nil;
-    //[NSThread sleepForTimeInterval:0.05f];//slow down
 }
 
 @end

@@ -472,7 +472,9 @@ RCT_EXPORT_METHOD(unpair:(RCTPromiseResolveBlock)resolve
     
     NSLog(@"Write bluetooth success.");
     if(writeDataDelegate){
-        [writeDataDelegate didWriteDataToBle:true];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05f)), dispatch_get_main_queue(), ^{
+            [writeDataDelegate didWriteDataToBle:true];
+        });
     }
 }
  

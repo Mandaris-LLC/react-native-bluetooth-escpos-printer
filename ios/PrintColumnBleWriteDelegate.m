@@ -13,20 +13,20 @@
 NSMutableArray<NSMutableString *>  *columns;
 NSInteger maxRowCount;
 
-- (void)didWriteDataToBle:(BOOL)success {NSLog(@"Call back deletgate: %lu",_now+1);
-    if(_canceled){
+- (void)didWriteDataToBle:(BOOL)success {
+    if (_canceled) {
            if(_pendingReject) _pendingReject(@"ERROR_IN_PRINT_COLUMN",@"ERROR_IN_PRINT_COLUMN",nil);
         return;
     }
-    _now = _now+1;
+    _now = _now + 1;
     if(_now >= maxRowCount){
-        if(_error && _pendingReject){
+        if(_error && _pendingReject) {
             _pendingReject(@"ERROR_IN_PRINT_COLUMN",@"ERROR_IN_PRINT_COLUMN",nil);
-        }else if(_pendingResolve){
+        } else if(_pendingResolve) {
             _pendingResolve(nil);
         }
-    }else{
-        if(!success){
+    }else {
+        if (!success) {
             _error = true;
         }
         [self print];
@@ -38,16 +38,16 @@ NSInteger maxRowCount;
     maxRowCount = maxcount;
     [self print];
 }
--(void)print{
+-(void)print {
     [(NSMutableString *)[columns objectAtIndex:_now] appendString:@"\n\r"];//wrap line..
-    @try {
-        [self.printer textPrint:[columns objectAtIndex:_now] inEncoding:_encodig withCodePage:_codePage widthTimes:_widthTimes heightTimes:_heightTimes fontType:_fontType delegate:self];
-    }
-    @catch (NSException *e){
-        NSLog(@"ERROR IN PRINTING COLUMN:%@",e);
-        _pendingReject(@"ERROR_IN_PRINT_COLUMN",@"ERROR_IN_PRINT_COLUMN",nil);
-        self.canceled = true;
-    }
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.05f)), dispatch_get_main_queue(), ^{
+        @try {
+            [self.printer textPrint:[columns objectAtIndex:_now] inEncoding:_encodig withCodePage:_codePage widthTimes:_widthTimes heightTimes:_heightTimes fontType:_fontType delegate:self];
+        } @catch (NSException *e){
+            _pendingReject(@"ERROR_IN_PRINT_COLUMN",@"ERROR_IN_PRINT_COLUMN",nil);
+            self.canceled = true;
+        }
+    });
 }
 
 @end;
